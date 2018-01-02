@@ -1,0 +1,203 @@
+//@author: chuter
+
+
+'use strict';
+
+
+(function() {
+  var viewport = document.getElementById('viewport');
+
+  function setViewPort() {
+    if (screen.width != 320) {
+      var scale = screen.width / 640;
+      viewport.setAttribute(
+        'content',
+        'width=640, initial-scale='+scale+', maximum-scale='+scale+', user-scalable=no'
+      );
+    } else {
+      viewport.setAttribute(
+        'content', 
+        'width=640, initial-scale=0.5, maximum-scale=0.5, user-scalable=no'
+      );
+    }
+  }
+
+  window.onload = setViewPort;
+}());
+
+
+var NB = {
+  Component: {}
+}
+
+NB.Surfaces = (function() {
+  var surfacesHistory = (function() {
+    var _prop = {
+      onSurface: function(surfaceName) {
+        window.history.replaceState({hasNewSurface: true}, null, '');
+        window.history.pushState({inNewSurface: true}, null, '@'+surfaceName);
+      },
+
+      handlePopState: function(surfaces) {
+        return function(event) {
+          var prevState = event.state;
+
+          if (prevState && prevState.hasNewSurface===true) {
+            surfaces.prev();
+          }
+        };
+      }
+    };
+
+    return _prop;
+  })();
+
+  var activeIndex = 0;
+  var surfaces = [];
+
+  $('.surface').each(function(index, el) {
+    var $el = $(el);
+
+    if ($el.hasClass('active')) {
+      activeIndex = index;
+    }
+
+    surfaces.push({
+      el: el,
+      name: $el.data('name'),
+      index: index
+    });
+  });
+
+  var SurfaceTransition = (function() {
+
+    function registerAnimCallback($ele, callback) {
+      $ele.one(
+        "transitionend", 
+        callback
+      );
+    }
+
+    var transform = {
+
+      leftIn: function(curSurface, nextSurface, callback) {
+        var $curSurfaceContainerEl = $(curSurface.el);
+        var $nextSurfaceContainerEl = $(nextSurface.el);
+        var isTransforming = false;
+
+        $nextSurfaceContainerEl.addClass('next');
+        nextSurface.el.offsetWidth;
+        $curSurfaceContainerEl.addClass('left');
+        $nextSurfaceContainerEl.addClass('left');
+        
+        registerAnimCallback($nextSurfaceContainerEl, function(event) {
+          if (isTransforming) {
+            return;
+          }
+
+          isTransforming = true;
+
+          $nextSurfaceContainerEl.removeClass('next left').addClass('active');
+          $curSurfaceContainerEl.addClass('prev--display').removeClass('active left');
+
+          if (callback) {
+            callback();
+          }
+        });
+      },
+
+      rightOut: function(curSurface, prevSurface, callback) {
+        var $preSurfaceContainerEl = $(prevSurface.el);
+        var $curSurfaceContainerEl = $(curSurface.el);
+        var isTransforming = false;
+
+        $preSurfaceContainerEl.addClass('prev').removeClass('prev--display');
+        prevSurface.el.offsetWidth;
+        $curSurfaceContainerEl.addClass('right');
+        $preSurfaceContainerEl.addClass('right');
+
+        registerAnimCallback($curSurfaceContainerEl, function() {
+          if (isTransforming) {
+            return;
+          }
+
+          isTransforming = true;
+
+          $preSurfaceContainerEl.removeClass('right prev').addClass('active');
+          $curSurfaceContainerEl.removeClass('active right');
+
+          if (callback) {
+            callback();
+          }
+        });
+      },
+    };
+
+    return transform;
+  })();
+
+
+  var _props = {
+    getCurActiveSurface: function() {
+      if (surfaces.length > activeIndex) {
+        return surfaces[activeIndex];
+      } else {
+        return null;
+      }
+    },
+
+    getNextSurface: function() {
+      if (activeIndex+1 >= surfaces.length) {
+        return null;
+      } else {
+        return surfaces[activeIndex+1];
+      }
+    },
+
+    getPrevSurface: function() {
+      if (activeIndex === 0) {
+        return null;
+      } else {
+        return surfaces[activeIndex-1];
+      }
+    },
+
+    prev: function(cb) {
+      var _prevSurface = this.getPrevSurface();
+      var _curSurface = this.getCurActiveSurface();
+
+      if (_prevSurface) {
+        SurfaceTransition.rightOut(_curSurface, _prevSurface, function() {
+          activeIndex -= 1;
+
+          if (cb) {
+            cb();
+          }
+        });
+      }
+    },
+
+    next: function(cb) {
+      var _nextSurface = this.getNextSurface();
+      var _curSurface = this.getCurActiveSurface();
+
+      if (_nextSurface) {
+        SurfaceTransition.leftIn(_curSurface, _nextSurface, function() {
+          surfacesHistory.onSurface(_nextSurface.name);
+          activeIndex += 1;
+
+          if (cb) {
+            cb();
+          }
+        });
+      }
+    }
+  }
+
+  window.addEventListener('popstate', surfacesHistory.handlePopState(_props));
+  return _props;
+}());
+
+
+//export
+window.NB = NB;
